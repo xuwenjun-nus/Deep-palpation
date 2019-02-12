@@ -1,0 +1,107 @@
+UPDATE: 01-02-2018
+%--------------------------------------------------------------------------
+%--------------------------------------------------------------------------
+Important changes relative to version RLfinger29-01-2018.zip
+
+ >>>>> MDP.m >>>>>
+line44: (replace)
+    obj.actionsafetest(action); % action = obj.parse(action); % max(min(action, UB),LB)     
+add method:
+    function actionsafetest(obj, action)
+            if logical(sum(abs(action.*obj.actionscale) > obj.actionsafeB))
+                msg = 'Actions exceed safty bounds.';
+                error(msg);                
+            end
+        end
+ >>>>> DDPG.m >>>>>
+line2: (add)
+    dbstop if error
+ >>>>> DDPG_solver.m >>>>>
+line94: (delete)
+     % action = obj.mdp.parse(action')';
+ >>>>> URfinger_Basic.m >>>>>
+add in perporties
+    actionsafeB = [5*ones(3,1);5*ones(3,1);1000]; % m degree 
+in function nextstate = trans_core(obj,state, action)
+    forceSensorPos = obj.Tft(1:3,4)'+ F_ZO' * 14; % sensor in mm
+ >>>>>>>>>>>>>>>>>>>>>>>>>   
+replace file  URFmovepress.m
+%--------------------------------------------------------------------------
+%--------------------------------------------------------------------------
+
+Manual UPDATE: 29-01-2018
+%--------------------------------------------------------------------------
+%-----<set RUN_DDPG.m before learning>------------------------------------
+
+----- (step1) orientation only ----------
+mdp = URfinger
+----- (step2) fix orientation, only learn position (action dimension:3) ---
+mdp = URfinger_d3
+replace the new initstate in URfinger_d3.init()
+
+----- press from tissue surface ----------
+-----(dn and dAngel are within the range during the whole process)----------
+mdp = URFpress;         % terminate when force satisfied
+
+----- begin at 0.01m over the surface  ------------
+-----(dn and dAngel are within the range during the whole process)----------
+mdp = URFmovepress(0.01);      % terminate when force satisfied
+
+%--------------------------------------------------------------------------
+%-----<Initialize noise setting>------------------------------------------------------
+1. Initialize noise while training
+DDPG_Solver.m >>>>
+state = obj.mdp.initstate(1,'neednoise',false);
+'neednoise'  false: no noise
+             true : have noise
+
+2. Initialize noise while evaluating
+show_simulation.m >>>> evaluate_policies.m >>>>
+state = mdp.initstate(totepisodes,'neednoise',false);
+
+3. Initialize noise while recording
+collect_samples.m >>>>
+state = mdp.initstate(episodes,'neednoise',false);
+
+
+
+%--------------------------------------------------------------------------
+%-----<Interface to real experiments>--------------------------------------
+
+general finger MDP -> URfinger_Basic
+% tissue corner point: P1 P2 P3 P4
+% tissue center point: P0
+% tip point: TIP
+
+% [the interface to real reward from sensors]
+% properties of TipReward:   
+% 'cosine'            cos(TIP_P0, norm_P0)
+%                     cosine >= 0 over the tissue
+%                     cosine <  0 under the tissue
+% 'distance'          vertical distance to tissue surface 
+% 'dp'                distance between TIP and P0
+% 'dn'                distance between TIP and norm_P0
+% 'F'                 force
+% 'Orientation'       <norm_P0, TIP_z>
+% 'dAngel'            |Orientation-180|
+%
+% [the interface of initialized states]
+% init()   ->         TCPinit, InitState0 
+
+%--------------------------------------------------------------------------
+%-----<Files of MDP>-------------------------------------------------------
+
+1# connecting function to RL 
+(Abstract) MDP < handle
+
+2# general finger MDP, interface to real experiment
+URfinger_Basic < MDP 
+
+3# specified MDP for orientation learning (step1)
+URfinger < URfinger_Basic      
+
+4# specified MDP for position learning (step2)
+URfinger_d3 < URfinger_Basic     
+
+5# specified MDP for position learning 
+URFmovepress < URfinger_Basic   
